@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Your OTT App</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="theme-color" content="#0d0d14" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.15/hls.min.js"></script>
+<style>
+  :root {
+    --bg: #0d0d14; --surface: #16161f; --surface-2: #1e1e2a; --border: #2a2a38;
+    --text: #f2f2f5; --text-dim: #9a9aab; --accent: #ff5a5f; --accent-dim: #7a2e30;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; }
+  header.app-bar { display: flex; align-items: center; justify-content: space-between; padding: 18px 18px 10px; }
+  header.app-bar .brand { font-size: 17px; font-weight: 600; }
+  header.app-bar .brand span { color: var(--accent); }
+  header.app-bar .install-btn {
+    font-size: 11.5px; background: var(--surface); border: 1px solid var(--border);
+    color: var(--text-dim); padding: 6px 11px; border-radius: 999px; cursor: pointer; display: none;
+  }
+  main { flex: 1; overflow-y: auto; padding-bottom: 8px; }
+  .screen { display: none; padding: 0 18px 18px; }
+  .screen.active { display: block; }
+
+  .hero {
+    border-radius: 16px; height: 150px;
+    background: linear-gradient(135deg, #3a1f3d, #1a1a2e);
+    display: flex; flex-direction: column; justify-content: flex-end;
+    padding: 16px; margin-bottom: 22px; position: relative; overflow: hidden;
+  }
+  .hero::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 80% 20%, rgba(255,90,95,0.25), transparent 60%); }
+  .hero .tag { font-size: 11px; color: var(--text-dim); position: relative; }
+  .hero h2 { margin: 4px 0 10px; font-size: 19px; position: relative; }
+
+  .section-title { font-size: 13px; color: var(--text-dim); margin: 0 0 10px; font-weight: 500; }
+  .rail { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 24px; }
+  .rail::-webkit-scrollbar { display: none; }
+  .rail-card {
+    flex: none; width: 118px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px; cursor: pointer;
+  }
+  .rail-card:hover { border-color: var(--accent-dim); }
+  .rail-card .thumb {
+    width: 100%; height: 62px; border-radius: 8px; background: var(--surface-2);
+    margin-bottom: 8px; display: flex; align-items: center; justify-content: center; font-size: 20px;
+  }
+  .rail-card .name { font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rail-card .live-dot { font-size: 10.5px; color: var(--accent); margin-top: 4px; }
+  .empty-note { font-size: 12.5px; color: var(--text-dim); margin-bottom: 24px; }
+
+  .search-input {
+    width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: 14px; margin-bottom: 16px;
+  }
+  .search-input:focus { outline: none; border-color: var(--accent-dim); }
+  .search-result { display: flex; justify-content: space-between; align-items: center; padding: 12px 4px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .search-result .meta { font-size: 11.5px; color: var(--text-dim); }
+
+  .chip-row { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; }
+  .chip { flex: none; font-size: 12px; padding: 6px 13px; min-height: 32px; display:flex; align-items:center; border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim); cursor: pointer; white-space: nowrap; }
+  .chip:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+  .rail-card:focus-visible, .channel-card:focus-visible, .search-result:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .channel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .channel-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; cursor: pointer; }
+  .channel-card:hover { border-color: var(--accent-dim); }
+  .channel-card .logo { width: 36px; height: 36px; border-radius: 8px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; margin-bottom: 10px; font-size: 16px; }
+  .channel-card .name { font-size: 13.5px; font-weight: 500; margin-bottom: 4px; }
+  .channel-card .lang { font-size: 11px; color: var(--text-dim); }
+  .channel-card .live { font-size: 10.5px; color: var(--accent); margin-top: 6px; }
+
+  .player-wrap { margin: 0 -18px 16px; }
+  .video-box { position: relative; background: #000; aspect-ratio: 16/9; }
+  video { width: 100%; height: 100%; }
+  .video-badge { position: absolute; top: 12px; left: 12px; background: var(--accent); color: white; font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; padding: 3px 9px; border-radius: 5px; }
+  .video-back, .video-fav { position: absolute; top: 12px; background: rgba(0,0,0,0.55); border: none; color: white; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 15px; }
+  .video-back { right: 12px; } .video-fav { right: 50px; }
+  .video-fav.active { color: var(--accent); }
+  .now-playing { position: absolute; bottom: 10px; left: 12px; right: 12px; font-size: 12.5px; color: white; text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
+  .player-status { padding: 0 0 16px; font-size: 12.5px; color: var(--text-dim); margin-top: -8px; }
+  .player-status.err { color: var(--accent); }
+  .retry-link { text-decoration: underline; cursor: pointer; color: var(--text); }
+
+  .list-item { display: flex; justify-content: space-between; align-items: center; padding: 13px 4px; border-bottom: 1px solid var(--border); }
+  .list-item .title { font-size: 14px; } .list-item .sub { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+
+  button.primary { background: var(--accent); color: white; border: none; padding: 9px 18px; border-radius: 8px; font-size: 13.5px; font-weight: 500; cursor: pointer; }
+  button.primary:hover { background: #ff6b6f; }
+
+  nav.tabbar { display: flex; border-top: 1px solid var(--border); background: var(--surface); padding-bottom: env(safe-area-inset-bottom); }
+  nav.tabbar button { flex: 1; background: none; border: none; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 0 12px; color: var(--text-dim); cursor: pointer; font-size: 10.5px; font-family: inherit; }
+  nav.tabbar button.active { color: var(--accent); }
+  nav.tabbar .icon { font-size: 18px; }
+</style>
+</head>
+<body>
+
+<header class="app-bar">
+  <div class="brand">Your <span>OTT</span> App</div>
+  <button class="install-btn" id="install-btn">Install app</button>
+</header>
+
+<main>
+  <section class="screen active" data-screen="home">
+    <div class="hero">
+      <div class="tag">Featured</div>
+      <h2 id="hero-title">Loading…</h2>
+      <button class="primary" id="hero-play">▶ Play</button>
+    </div>
+    <p class="section-title">Continue watching</p>
+    <div id="home-history"></div>
+    <div id="home-vod-preview" style="margin-bottom:8px;"></div>
+    <div id="home-categories"></div>
+  </section>
+
+  <section class="screen" data-screen="find">
+    <input class="search-input" id="search-input" placeholder="Search channels, movies, shows" oninput="renderSearch()" />
+    <div id="search-results"></div>
+  </section>
+
+  <section class="screen" data-screen="tv">
+    <div id="tv-player-slot"></div>
+    <div class="chip-row" id="tv-chips"></div>
+    <div class="channel-grid" id="tv-grid"></div>
+  </section>
+
+  <section class="screen" data-screen="vod">
+    <div id="vod-player-slot"></div>
+    <p class="section-title" style="margin-top:4px;">Movies &amp; Shows</p>
+    <div id="vod-categories"></div>
+  </section>
+
+  <section class="screen" data-screen="me">
+    <p class="section-title" style="margin-top:4px;">Favorites</p>
+    <div id="me-favorites" style="margin-bottom:20px;"></div>
+    <p class="section-title">Watch history</p>
+    <div id="me-history" style="margin-bottom:20px;"></div>
+    <div class="list-item"><div class="title">Settings</div></div>
+    <div class="list-item"><div><div class="title">App information</div><div class="sub">PWA preview build</div></div></div>
+    <div style="margin-top:18px;"><button class="primary">Sign in</button></div>
+  </section>
+
+  <!--
+    Not its own screen anymore — this is a single reusable player that JS
+    moves into #tv-player-slot (for channels) or #vod-player-slot (for
+    movies) via appendChild, so selecting content always plays it inline
+    on the TV or VOD tab, right above that tab's own list, rather than
+    jumping to a separate full-screen page.
+  -->
+  <div id="player-embed" style="display:none;">
+    <div class="player-wrap">
+      <div class="video-box">
+        <video id="video" controls playsinline></video>
+        <span class="video-badge" id="player-live-badge">LIVE</span>
+        <button class="video-back" onclick="closePlayer()" title="Stop">✕</button>
+        <button class="video-fav" id="player-fav-btn" onclick="toggleFavorite()">♡</button>
+        <div class="now-playing" id="player-now-playing"></div>
+      </div>
+    </div>
+    <div class="player-status" id="player-status">Loading…</div>
+  </div>
+</main>
+
+<nav class="tabbar">
+  <button class="tab active" data-tab="home" onclick="showTab('home')"><span class="icon">⌂</span>Home</button>
+  <button class="tab" data-tab="find" onclick="showTab('find')"><span class="icon">⌕</span>Find</button>
+  <button class="tab" data-tab="tv" onclick="showTab('tv')"><span class="icon">▭</span>TV</button>
+  <button class="tab" data-tab="vod" onclick="showTab('vod')"><span class="icon">🎬</span>VOD</button>
+  <button class="tab" data-tab="me" onclick="showTab('me')"><span class="icon">☺</span>Me</button>
+</nav>
+
+<script>
+  // --- Shared "backend": localStorage, so admin.html edits show up here on
+  // reload, in the same browser, without any real server. This is a stand-in
+  // for Firestore in the Android build — swap for a real fetch() to your
+  // backend when you have one; nothing else in this file needs to change if
+  // you keep the same channel object shape. ---
+  const STORE_KEY = "ott_channels";
+  const FAV_KEY = "ott_favorites";
+  const HISTORY_KEY = "ott_history";
+
+  function loadChannels() {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) return JSON.parse(raw);
+    const seed = [{
+      channelId: "channel_test_001",
+      name: "Test Channel (Big Buck Bunny)",
+      language: "English",
+      category: "General",
+      streamUrl: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+      isLive: true,
+      isActive: true
+    }];
+    localStorage.setItem(STORE_KEY, JSON.stringify(seed));
+    return seed;
+  }
+
+  function loadSet(key) { return new Set(JSON.parse(localStorage.getItem(key) || "[]")); }
+  function saveSet(key, set) { localStorage.setItem(key, JSON.stringify([...set])); }
+  function loadHistory() { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); }
+  function saveHistory(h) { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); }
+
+  const MOVIE_STORE_KEY = "ott_movies";
+  function loadMovies() {
+    const raw = localStorage.getItem(MOVIE_STORE_KEY);
+    return raw ? JSON.parse(raw).filter(m => m.isActive !== false) : [];
+  }
+  let MOVIES = loadMovies();
+
+  function renderVod() {
+    MOVIES = loadMovies();
+    const el = document.getElementById('vod-categories');
+    if (!MOVIES.length) {
+      el.innerHTML = '<p class="empty-note">No movies/shows yet — add some in admin.html → VOD tab.</p>';
+      return;
+    }
+    const byCategory = {};
+    const order = [];
+    MOVIES.forEach(m => {
+      const cat = m.category || 'Other';
+      if (!byCategory[cat]) { byCategory[cat] = []; order.push(cat); }
+      byCategory[cat].push(m);
+    });
+    el.innerHTML = order.map(cat => `
+      <p class="section-title">${cat}</p>
+      <div class="rail">
+        ${byCategory[cat].map(m => `
+          <div class="rail-card" onclick="openMoviePlayer('${m.movieId}')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">
+            ${m.posterUrl ? `<img src="${m.posterUrl}" alt="" style="width:100%;height:62px;object-fit:cover;border-radius:8px;margin-bottom:8px;" onerror="this.outerHTML='<div class=&quot;thumb&quot;>🎬</div>'" />` : '<div class="thumb">🎬</div>'}
+            <div class="name">${m.title}</div>
+            ${m.isPremium ? '<div class="live-dot" style="color:#e0b84f;">★ Premium</div>' : ''}
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
+  }
+
+  function openMoviePlayer(movieId) {
+    const movie = MOVIES.find(m => m.movieId === movieId);
+    if (!movie) return;
+    // Reuses the same player screen as channels — treat the movie as a
+    // non-live "channel" for playback purposes (same video element, same
+    // hls.js logic), just with a distinct ID namespace so it never
+    // collides with a real channelId in favorites/history.
+    const asChannel = {
+      channelId: 'movie_' + movie.movieId,
+      name: movie.title,
+      streamUrl: movie.streamUrl,
+      isLive: false
+    };
+    CHANNELS_TEMP_LOOKUP[asChannel.channelId] = asChannel;
+    openPlayer(asChannel.channelId, true);
+  }
+  const CHANNELS_TEMP_LOOKUP = {};
+
+  let CHANNELS = loadChannels().filter(c => c.isActive !== false);
+  const state = { favorites: loadSet(FAV_KEY), history: loadHistory(), currentChannelId: null };
+  let hls = null;
+
+  let selectedTvCategory = 'All';
+
+  function renderTvGrid() {
+    const categories = ['All', ...new Set(CHANNELS.map(c => c.category || 'Other'))];
+    if (!categories.includes(selectedTvCategory)) selectedTvCategory = 'All';
+
+    document.getElementById('tv-chips').innerHTML = categories
+      .map(c => `<div class="chip ${c === selectedTvCategory ? 'active' : ''}" onclick="selectTvCategory('${c.replace(/'/g, "\\'")}')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">${c}</div>`).join('');
+
+    const filtered = selectedTvCategory === 'All' ? CHANNELS : CHANNELS.filter(c => (c.category || 'Other') === selectedTvCategory);
+
+    document.getElementById('tv-grid').innerHTML = filtered.map(ch => `
+      <div class="channel-card" onclick="openPlayer('${ch.channelId}')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">
+        ${ch.logoUrl ? `<img src="${ch.logoUrl}" alt="" style="width:36px;height:36px;border-radius:8px;object-fit:cover;margin-bottom:10px;" onerror="this.outerHTML='<div class=&quot;logo&quot;>📡</div>'" />` : '<div class="logo">📡</div>'}
+        <div class="name">${ch.name}</div><div class="lang">${ch.language}</div>
+        ${ch.isLive ? '<div class="live">● LIVE</div>' : ''}
+      </div>`).join('') || '<p class="empty-note">No channels in this category.</p>';
+  }
+
+  function selectTvCategory(cat) {
+    selectedTvCategory = cat;
+    renderTvGrid();
+  }
+
+  function renderSearch() {
+    const q = document.getElementById('search-input').value.trim().toLowerCase();
+    const el = document.getElementById('search-results');
+    if (!q) { el.innerHTML = '<p class="empty-note">Start typing to search.</p>'; return; }
+    const results = CHANNELS.filter(c => c.name.toLowerCase().includes(q) || c.language.toLowerCase().includes(q) || c.category.toLowerCase().includes(q));
+    el.innerHTML = results.length ? results.map(ch => `
+      <div class="search-result" onclick="openPlayer('${ch.channelId}')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">
+        <div><div>${ch.name}</div><div class="meta">${ch.language} • ${ch.category}</div></div><div>▶</div>
+      </div>`).join('') : `<p class="empty-note">No results for "${q}".</p>`;
+  }
+
+  function renderMe() {
+    const favChannels = CHANNELS.filter(c => state.favorites.has(c.channelId));
+    document.getElementById('me-favorites').innerHTML = favChannels.length
+      ? favChannels.map(c => `<div class="list-item"><div class="title">${c.name}</div></div>`).join('')
+      : '<p class="empty-note">Nothing saved yet — tap ♡ on a channel to save it here.</p>';
+    document.getElementById('me-history').innerHTML = state.history.length
+      ? state.history.map(h => `<div class="list-item"><div class="title">${h.name}</div></div>`).join('')
+      : '<p class="empty-note">Watch something to see it here.</p>';
+  }
+
+  function channelThumb(ch) {
+    return ch.logoUrl
+      ? `<img src="${ch.logoUrl}" alt="" style="width:100%;height:62px;object-fit:cover;border-radius:8px;margin-bottom:8px;" onerror="this.outerHTML='<div class=&quot;thumb&quot;>📺</div>'" />`
+      : `<div class="thumb">📺</div>`;
+  }
+
+  function renderHome() {
+    document.getElementById('hero-title').textContent = CHANNELS[0] ? CHANNELS[0].name : 'No channels yet';
+    document.getElementById('hero-play').onclick = () => CHANNELS[0] && openPlayer(CHANNELS[0].channelId);
+
+    const historyChannels = state.history.map(h => CHANNELS.find(c => c.channelId === h.channelId)).filter(Boolean);
+    document.getElementById('home-history').innerHTML = historyChannels.length
+      ? `<div class="rail">${historyChannels.map(ch => `<div class="rail-card" onclick="openPlayer('${ch.channelId}')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">${channelThumb(ch)}<div class="name">${ch.name}</div></div>`).join('')}</div>`
+      : '<p class="empty-note">Nothing yet — watch something to see it here.</p>';
+
+    // Group by category — whatever category values are in the uploaded
+    // channel data automatically become their own section here, in the
+    // order they were first seen (matches sheet/playlist order).
+    const categoriesEl = document.getElementById('home-categories');
+    if (!CHANNELS.length) {
+      categoriesEl.innerHTML = '<p class="empty-note">No channels yet — add one in admin.html</p>';
+    } else {
+      const byCategory = {};
+      const order = [];
+      CHANNELS.forEach(ch => {
+        const cat = ch.category || 'Other';
+        if (!byCategory[cat]) { byCategory[cat] = []; order.push(cat); }
+        byCategory[cat].push(ch);
+      });
+
+      categoriesEl.innerHTML = order.map(cat => `
+        <p class="section-title">${cat}</p>
+        <div class="rail">
+          ${byCategory[cat].map(ch => `
+            <div class="rail-card" onclick="openPlayer('${ch.channelId}')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">
+              ${channelThumb(ch)}
+              <div class="name">${ch.name}</div>
+              ${ch.isLive ? '<div class="live-dot">● LIVE</div>' : ''}
+            </div>
+          `).join('')}
+        </div>
+      `).join('');
+    }
+
+    // Home links to VOD: a preview rail of movies/shows, "See all" jumps
+    // to the full VOD tab rather than duplicating every category here.
+    MOVIES = loadMovies();
+    const vodPreviewEl = document.getElementById('home-vod-preview');
+    if (MOVIES.length) {
+      vodPreviewEl.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <p class="section-title" style="margin:0;">Movies &amp; Shows</p>
+          <span style="font-size:12px; color:var(--accent); cursor:pointer;" onclick="showTab('vod')">See all →</span>
+        </div>
+        <div class="rail">
+          ${MOVIES.slice(0, 8).map(m => `
+            <div class="rail-card" onclick="openMoviePlayer('${m.movieId}')" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}">
+              ${m.posterUrl ? `<img src="${m.posterUrl}" alt="" style="width:100%;height:62px;object-fit:cover;border-radius:8px;margin-bottom:8px;" onerror="this.outerHTML='<div class=&quot;thumb&quot;>🎬</div>'" />` : '<div class="thumb">🎬</div>'}
+              <div class="name">${m.title}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    } else {
+      vodPreviewEl.innerHTML = '';
+    }
+  }
+
+  function showTab(tab) {
+    // If the player is currently embedded in the tab we're leaving, pause
+    // it — otherwise it would keep playing audio invisibly in the
+    // background, which is surprising rather than useful here.
+    const embed = document.getElementById('player-embed');
+    if (embed.style.display !== 'none') {
+      const inTv = document.getElementById('tv-player-slot').contains(embed);
+      const inVod = document.getElementById('vod-player-slot').contains(embed);
+      if ((inTv && tab !== 'tv') || (inVod && tab !== 'vod')) {
+        document.getElementById('video').pause();
+      }
+    }
+
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelector(`.screen[data-screen="${tab}"]`).classList.add('active');
+    document.querySelectorAll('nav .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    if (tab === 'me') renderMe();
+    if (tab === 'tv') renderTvGrid();
+    if (tab === 'vod') renderVod();
+  }
+
+  function openPlayer(channelId) {
+    const channel = CHANNELS.find(c => c.channelId === channelId) || CHANNELS_TEMP_LOOKUP[channelId];
+    if (!channel) return;
+    const isMovie = channelId.startsWith('movie_');
+    state.currentChannelId = channelId;
+
+    // Move the single shared player into whichever tab's list this
+    // content belongs to, then switch to that tab — this is what makes
+    // the channel/movie play inline above its own list instead of on a
+    // separate full-screen page.
+    const targetSlotId = isMovie ? 'vod-player-slot' : 'tv-player-slot';
+    const embed = document.getElementById('player-embed');
+    document.getElementById(targetSlotId).appendChild(embed);
+    embed.style.display = 'block';
+
+    document.getElementById('player-live-badge').style.display = channel.isLive ? 'block' : 'none';
+    document.getElementById('player-now-playing').textContent = channel.name;
+    document.getElementById('player-fav-btn').textContent = state.favorites.has(channelId) ? '♥' : '♡';
+    document.getElementById('player-fav-btn').classList.toggle('active', state.favorites.has(channelId));
+
+    playStream(channel.streamUrl);
+
+    state.history = state.history.filter(h => h.channelId !== channelId);
+    state.history.unshift({ channelId, name: channel.name, at: Date.now() });
+    saveHistory(state.history);
+
+    showTab(isMovie ? 'vod' : 'tv');
+  }
+
+  function closePlayer() {
+    const video = document.getElementById('video');
+    video.pause();
+    if (hls) { hls.destroy(); hls = null; }
+    document.getElementById('player-embed').style.display = 'none';
+    state.currentChannelId = null;
+  }
+
+  function toggleFavorite() {
+    const id = state.currentChannelId;
+    if (!id) return;
+    if (state.favorites.has(id)) state.favorites.delete(id); else state.favorites.add(id);
+    saveSet(FAV_KEY, state.favorites);
+    const btn = document.getElementById('player-fav-btn');
+    btn.textContent = state.favorites.has(id) ? '♥' : '♡';
+    btn.classList.toggle('active', state.favorites.has(id));
+  }
+
+  function playStream(url) {
+    const video = document.getElementById('video');
+    const statusEl = document.getElementById('player-status');
+    if (hls) { hls.destroy(); hls = null; }
+    statusEl.classList.remove('err');
+    statusEl.innerHTML = 'Loading…';
+
+    const timeoutId = setTimeout(() => {
+      statusEl.innerHTML = 'Still loading — your network may be blocking the stream or the hls.js library. Try Wi‑Fi or another network. <span class="retry-link" onclick="playStream(\'' + url + '\')">Retry</span>';
+      statusEl.classList.add('err');
+    }, 8000);
+    function done(text, isError) { clearTimeout(timeoutId); statusEl.innerHTML = text; statusEl.classList.toggle('err', !!isError); }
+
+    const isM3u8 = url.toLowerCase().includes('.m3u8');
+    if (!isM3u8) {
+      video.src = url;
+      video.addEventListener('loadedmetadata', () => done('Playing'), { once: true });
+      video.addEventListener('error', () => done('Playback error — could not load the file. <span class="retry-link" onclick="playStream(\'' + url + '\')">Retry</span>', true), { once: true });
+      video.play().catch(() => {});
+      return;
+    }
+
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url;
+      video.addEventListener('loadedmetadata', () => done('Playing (native HLS)'), { once: true });
+      video.play().catch(() => {});
+    } else if (window.Hls && Hls.isSupported()) {
+      hls = new Hls();
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        done('Playing (hls.js)');
+        video.play().catch(() => done('Loaded — tap ▶ on the video to start.'));
+      });
+      hls.on(Hls.Events.ERROR, (e, data) => {
+        if (data.fatal) done('Playback error: ' + data.type + '. <span class="retry-link" onclick="playStream(\'' + url + '\')">Retry</span>', true);
+      });
+    } else {
+      done('HLS not supported in this browser.', true);
+    }
+  }
+
+  // --- PWA install prompt ---
+  let deferredInstallPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    document.getElementById('install-btn').style.display = 'inline-block';
+  });
+  document.getElementById('install-btn').addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    document.getElementById('install-btn').style.display = 'none';
+  });
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js').catch(() => {}));
+  }
+
+  // Re-read channels if admin.html changed them in another tab of the same browser.
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORE_KEY) {
+      CHANNELS = loadChannels().filter(c => c.isActive !== false);
+      renderHome(); renderTvGrid(); renderSearch();
+    }
+  });
+
+  renderHome();
+  renderTvGrid();
+  renderSearch();
+</script>
+</body>
+</html>
